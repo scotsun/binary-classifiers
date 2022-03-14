@@ -1,4 +1,5 @@
 """Several simple classifiers."""
+from mimetypes import init
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -51,31 +52,108 @@ class KNN:
         """Predict for the entire test set."""
         return np.array([self._make_classification(test_row) for test_row in test])
 
-    def plot_decision_boundary(
-        self, x1_lims: tuple[float, float], x2_lims: tuple[float, float], step=5e-2
-    ) -> None:
-        """Plot the decision boundary based on the training data."""
-        x1 = np.arange(x1_lims[0], x1_lims[1], step)
-        x2 = np.arange(x2_lims[0], x2_lims[1], step)
-        X1, X2 = np.meshgrid(x1, x2)
-        points = np.concatenate((X1.reshape(-1, 1), X2.reshape(-1, 1)), axis=1)
-        points_labels = self.predict(points)
-        points_labels = points_labels.reshape(X1.shape)
-        plt.figure()
-        plt.pcolormesh(X1, X2, points_labels, alpha=0.3)
-        plt.scatter(self._X[:, 0], self._X[:, 1], c=self._y)
-        plt.xlim(X1.min(), X1.max())
-        plt.ylim(X2.min(), X2.max())
-        plt.title(f"KNN with {self._k} neighbors {self._p} norm")
-        plt.show()
+
+class LDA:
+    """LDA classifier."""
+
+    def __init__(self) -> None:
+        """Initialize."""
+        pass
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+        """Fit the data."""
+        self._X = X
+        self._y = y
+        self._classes = np.unique(y).astype("int")
+
+        m0 = X[y == 0].mean(axis=0)
+        m1 = X[y == 1].mean(axis=0)
+
+        # S_w = sum_c (sum((X_c - m_c)^2 ))
+        S_w_0 = (X[y == 0] - m0).T.dot((X[y == 0] - m0))
+        S_w_1 = (X[y == 1] - m1).T.dot((X[y == 1] - m1))
+        S_w = S_w_0 + S_w_1
+
+        v_star = np.linalg.inv(S_w).dot(m1 - m0)
+        v_star = v_star / np.linalg.norm(v_star)
+
+        self._v_star = v_star.reshape(-1, 1)
+        self._lda_comp = X.dot(v_star.reshape(-1, 1))
+
+    def gaussian_density(
+        self, x: np.ndarray, mu: np.ndarray, sigma: np.ndarray
+    ) -> np.ndarray:
+        """Calculate the normal density."""
+        pdfs: list[float] = []
+        for elem in x:
+            pdf = (
+                1
+                / (sigma * np.sqrt(2 * np.pi))
+                * np.exp(-((elem - mu) ** 2) / (2 * sigma ** 2))
+            )
+            pdfs.append(pdf)
+        return np.array(pdfs)
+
+    @property
+    def v_star(self) -> np.ndarray:
+        """Getter of lda_comp direction."""
+        return self._v_star
+
+    @property
+    def lda_comp(self) -> np.ndarray:
+        """Getter of lda_comp."""
+        return self._lda_comp
+
+    @property
+    def prior(self) -> np.ndarray:
+        """Prior class probability."""
+        return np.bincount(self._y.astype("int")) / len(self._y)
+
+    def posterior(self, X_test: np.ndarray) -> np.ndarray:
+        """Calculate posterior probability."""
+        x_star = X_test.dot(self.v_star)
+        means = np.zeros(len(self._classes))
+        sds = np.zeros(len(self._classes))
+        for c in self._classes:
+            means[c] = self.lda_comp[self._y == c].mean()
+            sds[c] = np.sqrt(self.lda_comp[self._y == c].var())
+        cond_den = self.gaussian_density(x_star, means, sds)
+        return cond_den * self.prior
+
+    def predict(self, X_test: np.ndarray) -> np.ndarray:
+        """Predict the class for test data."""
+        return self.posterior(X_test).argmax(axis=1)
+
+    @property
+    def training_score(self):
+        """Training accuracy."""
+        try:
+            score = (self.predict(self._X) == self._y).mean()
+            return score
+        except AttributeError as e:
+            raise AttributeError("the model hasn't fit any data yet")
 
 
-# TODO:
-#   LDA:
-#       find hyperplane wTx, s.t. w maximize diff_mean^2 / sum(group_var[i])
-#
-#   Naive Bayes ML:
-#       find argmax_y for p(y|x) ~ p(x|y) * p(y)
+def plot_decision_boundary(
+    classifier: KNN | LDA,
+    x1_lims: tuple[float, float],
+    x2_lims: tuple[float, float],
+    title: str,
+    step=5e-2,
+) -> None:
+    """Plot the decision boundary based on the training data."""
+    x1 = np.arange(x1_lims[0], x1_lims[1], step)
+    x2 = np.arange(x2_lims[0], x2_lims[1], step)
+    X1, X2 = np.meshgrid(x1, x2)
+    points = np.concatenate((X1.reshape(-1, 1), X2.reshape(-1, 1)), axis=1)
+    points_labels = classifier.predict(points)
+    points_labels = points_labels.reshape(X1.shape)
+    plt.figure()
+    plt.pcolormesh(X1, X2, points_labels, alpha=0.3)
+    plt.scatter(classifier._X[:, 0], classifier._X[:, 1], c=classifier._y)
+    plt.xlim(X1.min(), X1.max())
+    plt.ylim(X2.min(), X2.max())
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -104,4 +182,8 @@ if __name__ == "__main__":
 
     knn = KNN(10, 2)
     knn.fit(X=train_total_dat[:, :2], y=train_total_dat[:, 2])
-    knn.plot_decision_boundary(x1_lims=(-4, 4), x2_lims=(-3, 5))
+    plot_decision_boundary(knn, x1_lims=(-4, 4), x2_lims=(-3, 5), title="lol")
+
+    lda = LDA()
+    lda.fit(X=train_total_dat[:, :2], y=train_total_dat[:, 2])
+    plot_decision_boundary(lda, x1_lims=(-4, 4), x2_lims=(-3, 5), title="lol")
