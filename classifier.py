@@ -151,6 +151,7 @@ def plot_decision_boundary(
     plt.figure()
     plt.pcolormesh(X1, X2, points_labels, alpha=0.3)
     plt.scatter(classifier._X[:, 0], classifier._X[:, 1], c=classifier._y)
+    plt.title(title)
     plt.xlim(X1.min(), X1.max())
     plt.ylim(X2.min(), X2.max())
 
