@@ -153,7 +153,6 @@ def plot_decision_boundary(
     plt.scatter(classifier._X[:, 0], classifier._X[:, 1], c=classifier._y)
     plt.xlim(X1.min(), X1.max())
     plt.ylim(X2.min(), X2.max())
-    plt.show()
 
 
 if __name__ == "__main__":
@@ -182,8 +181,17 @@ if __name__ == "__main__":
 
     knn = KNN(10, 2)
     knn.fit(X=train_total_dat[:, :2], y=train_total_dat[:, 2])
-    plot_decision_boundary(knn, x1_lims=(-4, 4), x2_lims=(-3, 5), title="lol")
+    plot_decision_boundary(
+        knn,
+        x1_lims=(-4, 4),
+        x2_lims=(-3, 5),
+        title=f"KNN with k={knn._k}, p-norm={knn._p}",
+    )
+    plt.savefig("./knn_decision_boundry.png")
 
     lda = LDA()
     lda.fit(X=train_total_dat[:, :2], y=train_total_dat[:, 2])
-    plot_decision_boundary(lda, x1_lims=(-4, 4), x2_lims=(-3, 5), title="lol")
+    plot_decision_boundary(
+        lda, x1_lims=(-4, 4), x2_lims=(-3, 5), title="LDA and bayesian ML"
+    )
+    plt.savefig("./lda_decision_boundry.png")
