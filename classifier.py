@@ -1,5 +1,5 @@
 """Several simple classifiers."""
-from mimetypes import init
+
 import matplotlib.pyplot as plt
 import numpy as np
 
