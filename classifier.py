@@ -1,4 +1,4 @@
-"""Several simple classifiers."""
+"""Several simple classifiers. Author: Scott Sun."""
 
 import matplotlib.pyplot as plt
 import numpy as np
