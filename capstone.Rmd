@@ -1,0 +1,384 @@
+---
+title: 'Capstone: Compare and Constrast Four Different Regression Methods in the Binary Response Scenario'
+author: "Scott Sun"
+date: "2/19/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+source('./local_linear_regression.R')
+source('./local_linear_logistic_regression.R')
+```
+
+### Data Preprocessing
+
+```{r}
+df <- read.table("http://www.stat.cmu.edu/~larry/all-of-nonpar/=data/bpd.dat", 
+                  header=TRUE)
+```
+
+
+```{r}
+set.seed(1000)
+df_train_idx <- sample(nrow(df), 0.8*nrow(df))
+df_test_idx <- setdiff(1:nrow(df), df_train_idx)
+df_train <- df[df_train_idx,]
+df_test <- df[df_test_idx,]
+```
+
+**All four methods discussed in this project are regression methods from the statistical perspective, but I use them for a classification purpose.**
+
+### Linear Regression
+
+```{r}
+lr <- lm(BPD ~ birthweight, data = df_train)
+```
+
+```{r}
+p_train_hat <- predict(lr, data.frame(birthweight = df_train$birthweight))
+p_test_hat <- predict(lr, data.frame(birthweight = df_test$birthweight))
+```
+
+```{r, fig.width=7, fig.asp=0.618}
+p_hat <- predict(lr, data.frame(birthweight = df$birthweight))
+ggplot(data = df %>% mutate(p_hat = p_hat)) +
+  geom_point(aes(x = birthweight, y = BPD), alpha = 0.2, size = 3) +
+  geom_line(aes(x = birthweight, y = p_hat)) +
+  labs(title = "Fitted probability curve on all the data based on Linear Regression") +
+  theme_bw()
+```
+
+```{r}
+empirical_risk_train <- empirical_risk(y_hat = p_train_hat, y_true = df_train$BPD)
+empirical_risk_test <- empirical_risk(y_hat = p_test_hat, y_true = df_test$BPD)
+```
+
+```{r}
+print(empirical_risk_train)
+print(empirical_risk_test)
+```
+
+\pagebreak
+
+### Logistic Regression
+
+```{r}
+lgr <- glm(BPD ~ birthweight, data = df_train, family = binomial(link = "logit"))
+```
+
+```{r}
+p_train_hat <- predict(lgr, data.frame(birthweight = df_train$birthweight), type = "response")
+y_train_hat <- ifelse(p_train_hat > 0.5, 1, 0)
+p_test_hat <- predict(lgr, data.frame(birthweight = df_test$birthweight), type = "response")
+y_test_hat <- ifelse(p_test_hat > 0.5, 1, 0)
+```
+
+```{r, fig.width=7, fig.asp=0.618}
+p_hat <- predict(lgr, data.frame(birthweight = df$birthweight), type = "response")
+ggplot(data = df %>% mutate(p_hat = p_hat)) +
+  geom_point(aes(x = birthweight, y = BPD), alpha = 0.2, size = 3) +
+  geom_line(aes(x = birthweight, y = p_hat)) +
+  labs(title = "Fitted probability curve on all the data based on Logistic Regression") +
+  theme_bw()
+```
+
+```{r}
+empirical_risk_train <- empirical_risk(y_hat = p_train_hat, y_true = df_train$BPD)
+empirical_risk_test <- empirical_risk(y_hat = p_test_hat, y_true = df_test$BPD)
+```
+
+```{r}
+print(empirical_risk_train)
+print(empirical_risk_test)
+```
+
+\pagebreak
+
+### Local Linear Regression
+
+A large value for bandwidth is more preferable. The reason is that with a small $h$, $K(\frac{x - X_i}{h})$ can reach 0 so that `Inf` can be generated in the calculation.
+
+```{r}
+local_linearCV <- loocv_risk.best_bandwidth(y_train = df_train$BPD, x_train = df_train$birthweight,
+                                           from = 100, to = 200, step_size = 1)
+```
+
+```{r, fig.width=5, fig.asp=0.618}
+ggplot(data = na.omit(data.frame(bandwidth = local_linearCV$bandwidths, 
+                                 score = local_linearCV$score))) +
+  geom_line(aes(x = bandwidth, y = score), lwd = 1.5, color = "cyan4") +
+  labs(x = 'bandwidth',
+       y = 'CV (leave-one-out estimated risk)',
+       title = 'CV score curve') +
+  theme_bw()
+```
+```{r}
+local_linearCV$optim_bandwidth
+```
+
+```{r}
+p_train_hat <- local_linear_regressor(
+  y_train = df_train$BPD,
+  x = df_train$birthweight,
+  x_train = df_train$birthweight,
+  h = 155)
+
+p_test_hat <- local_linear_regressor(
+  y_train = df_train$BPD,
+  x = df_test$birthweight,
+  x_train = df_train$birthweight,
+  h = 155)
+```
+
+```{r, fig.width=7, fig.asp=0.618}
+p_hat <- local_linear_regressor(y_train = df_train$BPD, 
+                               x = df$birthweight, 
+                               x_train = df_train$birthweight, 
+                               h = 155)
+ggplot(data = df %>% mutate(p_hat = p_hat)) +
+  geom_point(aes(x = birthweight, y = BPD), alpha = 0.2, size = 3) +
+  geom_line(aes(x = birthweight, y = p_hat)) +
+  labs(title = "Fitted probability curve on all the data based on Local Linear Regression") +
+  theme_bw()
+```
+
+```{r}
+empirical_risk_train <- empirical_risk(y_hat = p_train_hat, y_true = df_train$BPD)
+empirical_risk_test <- empirical_risk(y_hat = p_test_hat, y_true = df_test$BPD)
+```
+
+```{r}
+print(empirical_risk_train)
+print(empirical_risk_test)
+```
+
+\pagebreak
+
+### Local Linear Logistic Regression
+
+```{r}
+local_linear_logisticCV <- loocv_loglike.best_bandwidth(x_train = df_train$birthweight, 
+                                                        y_train = df_train$BPD, 
+                                                        from = 100, to = 600, step_size = 10)
+```
+
+```{r, fig.width=5, fig.asp=0.618}
+ggplot(data = na.omit(data.frame(bandwidth = local_linear_logisticCV$bandwidths, 
+                                 score = local_linear_logisticCV$score))) +
+  geom_line(aes(x = bandwidth, y = score), lwd = 1.5, color = "cyan4") +
+  labs(x = 'bandwidth',
+       y = 'CV (leave-one-out log-likelihood)',
+       title = 'CV score curve') +
+  theme_bw()
+```
+
+```{r}
+local_linear_logisticCV$optim_bandwidth
+```
+
+```{r}
+p_train_hat <- local_linear_logistic_regressor(
+  x_train = df_train$birthweight,
+  y_train = df_train$BPD,
+  x = df_train$birthweight,
+  h = 220
+)
+
+p_test_hat <- local_linear_logistic_regressor(
+  x_train = df_train$birthweight,
+  y_train = df_train$BPD,
+  x = df_test$birthweight,
+  h = 220
+)
+```
+
+```{r, fig.width=7, fig.asp=0.618}
+p_hat <- local_linear_logistic_regressor(x_train = df_train$birthweight,
+                                         y_train = df_train$BPD,
+                                         x = df$birthweight,
+                                         h = 220)
+ggplot(data = df %>% mutate(p_hat = p_hat)) +
+  geom_point(aes(x = birthweight, y = BPD), alpha = 0.2, size = 3) +
+  geom_line(aes(x = birthweight, y = p_hat)) +
+  labs(title = "Fitted probability curve on all the data based on Local Linear Logistic Regression") +
+  theme_bw()
+```
+
+```{r}
+empirical_risk_train <- empirical_risk(y_hat = p_train_hat, y_true = df_train$BPD)
+empirical_risk_test <- empirical_risk(y_hat = p_test_hat, y_true = df_test$BPD)
+```
+
+```{r}
+print(empirical_risk_train)
+print(empirical_risk_test)
+```
+
+\pagebreak
+
+### Conclusion
+
+```{r, echo=FALSE, fig.width=7, fig.asp=0.7}
+p_hat_lr <- predict(lr, data.frame(birthweight = df$birthweight))
+p_hat_lgr <- predict(lgr, data.frame(birthweight = df$birthweight), type = "response")
+p_hat_llr <- local_linear_regressor(y_train = df_train$BPD, 
+                                    x = df$birthweight, 
+                                    x_train = df_train$birthweight, 
+                                    h = 155)
+p_hat_lllgr <- local_linear_logistic_regressor(x_train = df_train$birthweight,
+                                               y_train = df_train$BPD,
+                                               x = df$birthweight,
+                                               h = 220)
+df <- read.table("http://www.stat.cmu.edu/~larry/all-of-nonpar/=data/bpd.dat", 
+                  header=TRUE)
+df <- df %>% mutate(
+  p1 = p_hat_lr,
+  p2 = p_hat_lgr,
+  p3 = p_hat_llr,
+  p4 = p_hat_lllgr
+)
+
+ggplot(data = df) +
+  geom_point(aes(x = birthweight, y = BPD), alpha = 0.2, size = 3) +
+  geom_line(aes(x = birthweight, y = p1, color = I("linear regression")),
+            size = 1) +
+  geom_line(aes(x = birthweight, y = p2, color = I("logistic regression")),
+            size = 1) +
+  geom_line(aes(x = birthweight, y = p3, color = I("local linear regression")),
+            size = 1) +
+  geom_line(aes(x = birthweight, y = p4, color = I("local linear LGR")),
+            size = 1) +
+  scale_color_manual(values = c("linear regression" = "red", 
+                                "logistic regression" = "orange", 
+                                "local linear regression" = "chartreuse3",
+                                "local linear LGR" = "cornflowerblue")) +
+  labs(title = "Fitted probability curves based different methods",
+       color = "") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+|method                          |training empirical risk|testing empirical risk|
+|:------------------------------:|:---------------------:|:--------------------:|
+|linear regression               |0.1633                 |0.1818                |
+|logistic regression             |0.1567                 |0.1778                |
+|local linear regression         |0.1495                 |0.1736                |
+|local linear logistic regression|0.1497                 |0.1730                |
+
+Based on the empirical risk values above, we can conclude that the both nonparametric methods beat up their parametric counter part. However, it is hard to tell which nonparametric approach is better than the other only based on this scenario.
+
+### Appendix (Functions)
+
+**Local linear Regression**
+
+```{r}
+local_linear_effective_kernal <- function(x, x_train, h) {
+  K <- function(x) {dnorm(x, mean = 0, sd = 1)}
+  # S_1
+  S_1 <- sum(K((x_train - x)/h) * (x_train - x))
+  S_2 <- sum(K((x_train - x)/h) * (x_train - x)^2)
+  # b_i in vector
+  b <- K((x_train - x)/h) * (S_2 - (x_train - x) * S_1)
+  l <- b/sum(b)
+  return(l)
+}
+
+local_linear_smoother <- function(x, x_train, h) { # the L matrix
+  L <- c()
+  for (elem in x) {
+    l <- local_linear_effective_kernal(elem, x_train, h)
+    L <- append(L, l)
+  }
+  n <- length(x_train)
+  m <- length(x)
+  L <- matrix(L, nrow = m, ncol = n, byrow = TRUE)
+  return(L)
+}
+
+local_linear_regressor <- function(y_train, x, x_train, h) {
+  L <- local_linear_smoother(x, x_train, h)
+  r_hat <- L %*% y_train %>%
+    as.vector()
+  return(r_hat)
+}
+
+loocv_risk <- function(y_train, x, x_train, h) {
+  L_ii <- diag(local_linear_smoother(x, x_train, h))
+  r_hat <- local_linear_regressor(y_train, x, x_train, h)
+  estimated_risk <- mean(((y_train - r_hat)/(1 - L_ii))^2)
+  return(estimated_risk)
+}
+
+loocv_risk.best_bandwidth <- function(y_train, x_train, from, to, step_size) {
+  bandwidths <- seq(from, to, by = step_size)
+  score <- c()
+  for (h in bandwidths) {
+    score <- append(score, loocv_risk(y_train, x = x_train, x_train = x_train, h = h))
+  }
+  return(list(score = score,
+              bandwidths = bandwidths,
+              optim_bandwidth = bandwidths[which.min(score)]))
+}
+
+empirical_risk <- function(y_hat, y_true) {
+  (y_hat - y_true)^2 %>%
+    mean()
+}
+```
+
+**Local Linear Logistic Regression**
+
+```{r}
+local_log_likelihood <- function(a, x_train, y_train, x, h) {
+  K <- function(x) {dnorm(x, mean = 0, sd = 1)}
+  
+  a0 <- a[1]
+  a1 <- a[2]
+  l <- sum(
+    K((x - x_train)/h) * (y_train*(a0 + a1*(x_train - x)) - log(1 + exp(a0 + a1*(x_train - x))))
+  )
+  return(l)
+}
+
+get_optimal_a0 <- function(init_a, x_train, y_train, x, h) {
+  
+  a_hat <- optim(par = init_a, local_log_likelihood, 
+                 x_train = x_train, y_train = y_train, x = x, h = h,
+                 control = list(fnscale = -1))
+  return(a_hat$par[1])
+}
+
+local_linear_logistic_regressor <- function(x_train, y_train, x, h) {
+  r_hat <- c()
+  for (elem in x) {
+    a0_hat <- get_optimal_a0(init_a = c(0, 0), x_train, y_train, elem, h)
+    r_hat_x <- exp(a0_hat) / (1 + exp(a0_hat))
+    r_hat <- append(r_hat, r_hat_x)
+  }
+  return(r_hat)
+}
+
+loocv_loglike <- function(x_train, y_train, h) {
+  a0_hat <- c() # list of leave-one-out eta_hat
+  for (i in 1:length(x_train)) {
+    a0_hat_i <- get_optimal_a0(init_a = c(0, 0), x_train[-i], y_train[-i], x_train[i], h)
+    a0_hat <- append(a0_hat, a0_hat_i)
+  }
+  score <- sum(y_train*a0_hat - log(1 + exp(a0_hat)))
+  return(score)
+}
+
+loocv_loglike.best_bandwidth <- function(x_train, y_train, from, to, step_size) {
+  bandwidths <- seq(from, to, by = step_size)
+  score <- c()
+  for (h in bandwidths) {
+    score <- append(score, loocv_loglike(x_train, y_train, h))
+  }
+  return(list(score = score,
+              bandwidths = bandwidths,
+              optim_bandwidth = bandwidths[which.max(score)])) 
+  # since CV is log-likelihood, we need to pick max CV
+}
+```
